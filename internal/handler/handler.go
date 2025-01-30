@@ -41,4 +41,9 @@ func (h *Handler) SetupRoutes(api *echo.Group) {
 		eventAPI.POST("/:id/approve", h.ApproveEvent)
 		eventAPI.POST("/:id/reject", h.RejectEvent)
 	}
+
+	contactAPI := api.Group("/contact")
+	{
+		contactAPI.POST("", h.CreateContact)
+	}
 }
