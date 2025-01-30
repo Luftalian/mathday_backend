@@ -263,7 +263,7 @@ func (h *Handler) CreateEvent(c echo.Context) error {
 
 	// 3) Slack通知
 	InitSlack()
-	authLink := fmt.Sprintf(config.CORE_BACKEND_URL+"/api/v1/event/update/%d?auth_code=%s",
+	authLink := fmt.Sprintf(config.CORE_FRONTEND_URL+"/events/update/%d?authcode=%s",
 		eventID, authCode)
 	slackMessage := fmt.Sprintf(
 		"新しいイベントが作成されました。\nタイトル: %s\nオーガナイザー: %s\n認証リンク: %s",
