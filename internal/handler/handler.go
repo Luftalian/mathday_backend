@@ -38,5 +38,7 @@ func (h *Handler) SetupRoutes(api *echo.Group) {
 		eventAPI.POST("/new", h.CreateEvent)
 		eventAPI.GET("/:id", h.GetEvent)
 		eventAPI.GET("/update/:id", h.UpdateEvent)
+		eventAPI.POST("/:id/approve", h.ApproveEvent)
+		eventAPI.POST("/:id/reject", h.RejectEvent)
 	}
 }

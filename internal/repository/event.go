@@ -210,7 +210,7 @@ func (r *Repository) GetEvents(ctx context.Context) ([]*Event, error) {
 }
 
 // AuthenticateEvent は id と auth_code が一致するイベントを認証済みに更新します。
-func (r *Repository) AuthenticateEvent(ctx context.Context, id int, authCode string) error {
+func (r *Repository) AuthenticateEvent(ctx context.Context, id int, authCode uuid.UUID) error {
 	query := `
 		UPDATE events
 		SET is_authenticated = TRUE
@@ -231,20 +231,27 @@ func (r *Repository) AuthenticateEvent(ctx context.Context, id int, authCode str
 	return nil
 }
 
-// GetEvent は指定されたIDの認証済みイベントを1件取得します。
-func (r *Repository) GetEvent(ctx context.Context, id int) (*Event, error) {
+// GetEvent は指定されたIDとオプションのauthCodeに基づいてイベントを1件取得します。
+func (r *Repository) GetEvent(ctx context.Context, id int, authCode uuid.UUID) (*Event, error) {
 	query := `
 		SELECT id, title, organizer, start_date, start_time, end_date, end_time, email,
 		       prefecture, event_type, is_online, is_offline, official_url,
 		       online_lecture_url, venue, target, capacity, description, tags,
 		       speakers, schedule, is_authenticated
 		FROM events
-		WHERE id = ? AND is_authenticated = TRUE
+		WHERE id = ? AND (is_authenticated = TRUE OR auth_code = ?)
 	`
 	var event Event
 	var tagsJSON, speakersJSON, scheduleJSON []byte
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
+	var code interface{}
+	if authCode != uuid.Nil {
+		code = authCode
+	} else {
+		code = sql.NullString{}
+	}
+
+	err := r.db.QueryRowContext(ctx, query, id, code).Scan(
 		&event.ID,
 		&event.Title,
 		&event.Organizer,
@@ -275,7 +282,7 @@ func (r *Repository) GetEvent(ctx context.Context, id int) (*Event, error) {
 		return nil, fmt.Errorf("イベントの取得に失敗: %w", err)
 	}
 
-	// JSONの復元
+	// JSONフィールドのデシリアライズ
 	if err := json.Unmarshal(tagsJSON, &event.Tags); err != nil {
 		return nil, fmt.Errorf("タグのデシリアライズに失敗: %w", err)
 	}

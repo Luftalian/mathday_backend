@@ -10,6 +10,7 @@ import (
 
 	vd "github.com/go-ozzo/ozzo-validation"
 	"github.com/go-ozzo/ozzo-validation/is"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	// リポジトリとの連携
@@ -31,6 +32,10 @@ func convertSpeakers(speakers []Speaker) []repository.Speaker {
 	}
 	return result
 }
+
+const (
+	AlreadyApproved = "Already Approved"
+)
 
 func convertSpeakersToResponse(speakers []repository.Speaker) []Speaker {
 	result := make([]Speaker, len(speakers))
@@ -126,6 +131,14 @@ type (
 		Schedule         []Schedule `json:"schedule"`
 	}
 
+	ApproveEventRequest struct {
+		AuthCode string `json:"authcode"`
+	}
+
+	RejectEventRequest struct {
+		AuthCode string `json:"authcode"`
+	}
+
 	Speaker struct {
 		Name         string `json:"name"`
 		Title        string `json:"title"`
@@ -176,6 +189,7 @@ func postToSlack(msg string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Slackからの応答が異常です: %s", resp.Status)
 	}
+	fmt.Println("Slackへの通知が成功しました")
 	return nil
 }
 
@@ -318,7 +332,12 @@ func (h *Handler) UpdateEvent(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid event ID").SetInternal(err)
 	}
 
-	err = h.repo.AuthenticateEvent(c.Request().Context(), id, authCode)
+	authCodeUUID, err := uuid.Parse(authCode)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid auth code").SetInternal(err)
+	}
+
+	err = h.repo.AuthenticateEvent(c.Request().Context(), id, authCodeUUID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "authentication failed").SetInternal(err)
 	}
@@ -332,12 +351,22 @@ func (h *Handler) UpdateEvent(c echo.Context) error {
 // GET /api/v1/event/:id
 func (h *Handler) GetEvent(c echo.Context) error {
 	idParam := c.Param("id")
+	authCode := c.QueryParam("authcode")
+
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid event ID").SetInternal(err)
 	}
 
-	event, err := h.repo.GetEvent(c.Request().Context(), id)
+	var codeUUID uuid.UUID
+	if authCode != "" {
+		codeUUID, err = uuid.Parse(authCode)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid auth code").SetInternal(err)
+		}
+	}
+
+	event, err := h.repo.GetEvent(c.Request().Context(), id, codeUUID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError).SetInternal(err)
 	}
@@ -366,6 +395,84 @@ func (h *Handler) GetEvent(c echo.Context) error {
 		Tags:             event.Tags,
 		Speakers:         convertSpeakersToResponse(event.Speakers),
 		Schedule:         convertSchedulesToResponse(event.Schedule),
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
+// ApproveEvent はイベントを承認します。
+func (h *Handler) ApproveEvent(c echo.Context) error {
+	idParam := c.Param("id")
+	var req ApproveEventRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request").SetInternal(err)
+	}
+
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid event ID").SetInternal(err)
+	}
+
+	authCodeUUID, err := uuid.Parse(req.AuthCode)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid auth code").SetInternal(err)
+	}
+
+	event, err := h.repo.GetEvent(c.Request().Context(), id, authCodeUUID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to retrieve event").SetInternal(err)
+	}
+	if event == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
+	if event.IsAuthenticated {
+		return echo.NewHTTPError(http.StatusBadRequest, AlreadyApproved)
+	}
+
+	err = h.repo.AuthenticateEvent(c.Request().Context(), id, authCodeUUID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "authentication failed").SetInternal(err)
+	}
+
+	res := UpdateEventResponse{
+		Message: "Event approved successfully",
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
+// RejectEvent はイベントを拒否します（イベントが存在し、未承認であることを確認して200を返します）。
+func (h *Handler) RejectEvent(c echo.Context) error {
+	idParam := c.Param("id")
+	var req RejectEventRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request").SetInternal(err)
+	}
+
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid event ID").SetInternal(err)
+	}
+
+	authCodeUUID, err := uuid.Parse(req.AuthCode)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid auth code").SetInternal(err)
+	}
+
+	// イベントが存在し、未承認であることを確認
+	event, err := h.repo.GetEvent(c.Request().Context(), id, authCodeUUID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to retrieve event").SetInternal(err)
+	}
+	if event == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
+
+	if event.IsAuthenticated {
+		return echo.NewHTTPError(http.StatusBadRequest, AlreadyApproved)
+	}
+
+	// なにもしないが200を返す
+	res := UpdateEventResponse{
+		Message: "Event rejected successfully",
 	}
 	return c.JSON(http.StatusOK, res)
 }
