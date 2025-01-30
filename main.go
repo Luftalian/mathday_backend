@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"strings"
+
 	"github.com/ras0q/go-backend-template/internal/handler"
 	"github.com/ras0q/go-backend-template/internal/migration"
 	"github.com/ras0q/go-backend-template/internal/pkg/config"
@@ -14,11 +17,16 @@ import (
 func main() {
 	e := echo.New()
 
+	allowOrigins := strings.Split(os.Getenv("ALLOW_ORIGINS"), ",")
+
+	// config.CORE_FRONTEND_URL
+	allowOrigins = append(allowOrigins, config.CORE_FRONTEND_URL)
+
 	// middlewares
 	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{config.CORE_FRONTEND_URL},
+		AllowOrigins: allowOrigins,
 	}))
 
 	// connect to database
