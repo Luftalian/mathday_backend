@@ -111,7 +111,6 @@ type (
 		StartTime        string     `json:"startTime"`
 		EndDate          string     `json:"endDate"`
 		EndTime          string     `json:"endTime"`
-		Email            string     `json:"email"`
 		Prefecture       *string    `json:"prefecture"`
 		EventType        *string    `json:"eventType"`
 		IsOnline         bool       `json:"isOnline"`
@@ -291,7 +290,6 @@ func (h *Handler) GetEvents(c echo.Context) error {
 			StartTime:        event.StartTime,
 			EndDate:          event.EndDate,
 			EndTime:          event.EndTime,
-			Email:            event.Email,
 			Prefecture:       event.Prefecture,
 			EventType:        event.EventType,
 			IsOnline:         event.IsOnline,
@@ -355,7 +353,6 @@ func (h *Handler) GetEvent(c echo.Context) error {
 		StartTime:        event.StartTime,
 		EndDate:          event.EndDate,
 		EndTime:          event.EndTime,
-		Email:            event.Email,
 		Prefecture:       event.Prefecture,
 		EventType:        event.EventType,
 		IsOnline:         event.IsOnline,
